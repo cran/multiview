@@ -10,9 +10,21 @@ multiview(
   y,
   rho = 0,
   family = gaussian(),
-  exclude = NULL,
-  mvlambda = NULL,
-  ...
+  weights = NULL,
+  offset = NULL,
+  alpha = 1,
+  nlambda = 100,
+  lambda.min.ratio = ifelse(nobs < nvars, 0.01, 1e-04),
+  lambda = NULL,
+  standardize = TRUE,
+  intercept = TRUE,
+  thresh = 1e-07,
+  maxit = 1e+05,
+  penalty.factor = rep(1, nvars),
+  exclude = list(),
+  lower.limits = -Inf,
+  upper.limits = Inf,
+  trace.it = 0
 )
 }
 \arguments{
@@ -24,13 +36,84 @@ multiview(
 
 \item{rho}{the weight on the agreement penalty, default 0. \code{rho=0}
 is a form of early fusion, and \code{rho=1} is a form of late fusion.
-We recommend trying a few values of \code{rho} including 0, 0.1, 0.25, 0.5, and 1 first;
-sometimes \code{rho} larger than 1 can also be helpful.}
+We recommend trying a few values of \code{rho} including 0, 0.1, 0.25,
+0.5, and 1 first; sometimes \code{rho} larger than 1 can also be
+helpful.}
 
 \item{family}{A description of the error distribution and link
 function to be used in the model. This is the result of a call to
 a family function. Default is \link[stats:family]{stats::gaussian}. (See
 \link[stats:family]{stats::family} for details on family functions.)}
+
+\item{weights}{observation weights. Can be total counts if
+responses are proportion matrices. Default is 1 for each
+observation}
+
+\item{offset}{A vector of length \code{nobs} that is included in
+the linear predictor (a \code{nobs x nc} matrix for the
+\code{"multinomial"} family).  Useful for the \code{"poisson"}
+family (e.g. log of exposure time), or for refining a model by
+starting at a current fit. Default is \code{NULL}. If supplied,
+then values must also be supplied to the \code{predict} function.}
+
+\item{alpha}{The elasticnet mixing parameter, with
+\eqn{0\le\alpha\le 1}.  The penalty is defined as
+\deqn{(1-\alpha)/2||\beta||_2^2+\alpha||\beta||_1.}
+\code{alpha=1} is the lasso penalty, and \code{alpha=0} the ridge
+penalty.}
+
+\item{nlambda}{The number of \code{lambda} values - default is 100.}
+
+\item{lambda.min.ratio}{Smallest value for \code{lambda}, as a
+fraction of \code{lambda.max}, the (data derived) entry value
+(i.e. the smallest value for which all coefficients are
+zero). The default depends on the sample size \code{nobs}
+relative to the number of variables \code{nvars}. If \code{nobs >
+  nvars}, the default is \code{0.0001}, close to zero.  If
+\code{nobs < nvars}, the default is \code{0.01}.  A very small
+value of \code{lambda.min.ratio} will lead to a saturated fit in
+the \code{nobs < nvars} case. This is undefined for
+\code{"binomial"} and \code{"multinomial"} models, and
+\code{glmnet} will exit gracefully when the percentage deviance
+explained is almost 1.}
+
+\item{lambda}{A user supplied \code{lambda} sequence, default
+\code{NULL}. Typical usage is to have the program compute its own
+\code{lambda} sequence. This sequence, in general, is different from
+that used in the \code{\link[glmnet:glmnet]{glmnet::glmnet()}} call (named \code{lambda})
+Supplying a value of \code{lambda} overrides this. WARNING: use with
+care. Avoid supplying a single value for \code{lambda} (for
+predictions after CV use \code{\link[stats:predict]{stats::predict()}} instead.  Supply
+instead a decreasing sequence of \code{lambda} values as \code{multiview}
+relies on its warms starts for speed, and its often faster to fit
+a whole path than compute a single fit.}
+
+\item{standardize}{Logical flag for x variable standardization,
+prior to fitting the model sequence. The coefficients are always
+returned on the original scale. Default is
+\code{standardize=TRUE}.  If variables are in the same units
+already, you might not wish to standardize. See details below for
+y standardization with \code{family="gaussian"}.}
+
+\item{intercept}{Should intercept(s) be fitted (default \code{TRUE})}
+
+\item{thresh}{Convergence threshold for coordinate descent. Each
+inner coordinate-descent loop continues until the maximum change
+in the objective after any coefficient update is less than
+\code{thresh} times the null deviance. Defaults value is
+\code{1E-7}.}
+
+\item{maxit}{Maximum number of passes over the data for all lambda
+values; default is 10^5.}
+
+\item{penalty.factor}{Separate penalty factors can be applied to
+each coefficient. This is a number that multiplies \code{lambda}
+to allow differential shrinkage. Can be 0 for some variables,
+which implies no shrinkage, and that variable is always included
+in the model. Default is 1 for all variables (and implicitly
+infinity for variables listed in \code{exclude}). Note: the
+penalty factors are internally rescaled to sum to nvars, and the
+lambda sequence will reflect this change.}
 
 \item{exclude}{Indices of variables to be excluded from the
 model. Default is none. Equivalent to an infinite penalty factor
@@ -40,21 +123,19 @@ function is most generally defined as \verb{function(x_list, y, ...)},
 and is called inside \code{multiview} to generate the indices for
 excluded variables.  The \code{...} argument is required, the others
 are optional.  This is useful for filtering wide data, and works
-correctly with \code{cv.glmnet}.}
+correctly with \code{cv.multiview}. See the vignette 'Introduction'
+for examples.}
 
-\item{mvlambda}{A user supplied \code{lambda} sequence, default
-\code{NULL}. Typical usage is to have the program compute its own
-\code{mvlambda} sequence. This sequence, in general, is different from
-that used in the \code{\link[glmnet:glmnet]{glmnet::glmnet()}} call (named \code{lambda})
-Supplying a value of \code{mvlambda} overrides this. WARNING: use with
-care. Avoid supplying a single value for \code{mvlambda} (for
-predictions after CV use \code{\link[stats:predict]{stats::predict()}} instead.  Supply
-instead a decreasing sequence of \code{mvlambda} values as \code{multiview}
-relies on its warms starts for speed, and its often faster to fit
-a whole path than compute a single fit.}
+\item{lower.limits}{Vector of lower limits for each coefficient;
+default \code{-Inf}. Each of these must be non-positive. Can be
+presented as a single value (which will then be replicated), else
+a vector of length \code{nvars}}
 
-\item{...}{further arguments to glmnet, some of which may be
-overridden as noted above}
+\item{upper.limits}{Vector of upper limits for each coefficient;
+default \code{Inf}. See \code{lower.limits}}
+
+\item{trace.it}{If \code{trace.it=1}, then a progress bar is
+displayed; useful for big models that take a long time to fit.}
 }
 \value{
 An object with S3 class \verb{"multiview","*" }, where \code{"*"} is
@@ -66,12 +147,13 @@ An object with S3 class \verb{"multiview","*" }, where \code{"*"} is
 models, a \verb{nvars x length(lambda)} matrix of coefficients, stored
 in sparse column format (\code{"CsparseMatrix"}). For \code{"multnet"} and
 \code{"mgaussian"}, a list of \code{nc} such matrices, one for each class.}
-\item{lambda}{The actual sequence of \code{\link[glmnet:glmnet]{glmnet::glmnet()}} \code{lambda} values used. When
-\code{alpha=0}, the largest lambda reported does not quite give the
-zero coefficients reported (\code{lambda=inf} would in principle).
-Instead, the largest \code{lambda} for \code{alpha=0.001} is used, and the
-sequence of \code{lambda} values is derived from this.}
-\item{mvlambda}{The corresponding sequence of multiview lambda values}
+\item{lambda}{The actual sequence of \code{\link[glmnet:glmnet]{glmnet::glmnet()}} \code{lambda}
+values used. When \code{alpha=0}, the largest lambda reported does not
+quite give the zero coefficients reported (\code{lambda=inf} would in
+principle).  Instead, the largest \code{lambda} for \code{alpha=0.001} is
+used, and the sequence of \code{lambda} values is derived from this.}
+\item{lambda}{The sequence of lambda values} \item{mvlambda}{The
+corresponding sequence of multiview lambda values}
 \item{dev.ratio}{The fraction of (null) deviance explained (for
 \code{"elnet"}, this is the R-square). The deviance calculations
 incorporate weights if present in the model. The deviance is
@@ -96,9 +178,8 @@ for internal debugging).}
 \description{
 \code{multiview} uses \code{\link[glmnet:glmnet]{glmnet::glmnet()}} to do most of its work and
 therefore takes many of the same parameters, but an intercept is
-always included, standardization is always done and several other
-parameters do not apply. Therefore they are always overridden and
-warnings issued.
+always included and several other parameters do not
+apply. Such inapplicable arguments are overridden and warnings issued.
 }
 \details{
 The current code can be slow for "large" data sets, e.g. when the
@@ -109,8 +190,9 @@ prints out its progress along the way.  One can also pre-filter the
 features to a smaller set, using the exclude option, with a filter
 function.
 
-If there are missing values in the feature matrices:
-we recommend that you center the columns of each feature matrix, and then fill in the missing values with 0.
+If there are missing values in the feature matrices: we recommend
+that you center the columns of each feature matrix, and then fill
+in the missing values with 0.
 
 For example, \cr
 \code{x <- scale(x,TRUE,FALSE)} \cr

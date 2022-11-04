@@ -6,95 +6,23 @@
 #' `multiview.path` solves the elastic net problem for a path of lambda values.
 #' It generalizes `multiview::multiview` in that it works for any GLM family.
 #'
-#' Sometimes the sequence is truncated before `nlambda` values of lambda
+#' Sometimes the sequence is truncated before `nlam` values of lambda
 #' have been used. This happens when `multiview.path` detects that the decrease
 #' in deviance is marginal (i.e. we are near a saturated fit).
 #'
-#' @param x_list a list of `x` matrices with same number of rows
-#'   `nobs`
-#' @param y the quantitative response with length equal to `nobs`, the
-#'   (same) number of rows in each `x` matrix
-#' @param rho the weight on the agreement penalty, default 0. `rho=0` is a form
-#' of early fusion, and `rho=1` is a form of late fusion.
-#' @param family A description of the error distribution and link
-#'   function to be used in the model. This is the result of a call to
-#'   a family function. Default is [stats::gaussian]. (See
-#'   [stats::family] for details on family functions.)
-#' @param weights observation weights. Can be total counts if
-#'   responses are proportion matrices. Default is 1 for each
-#'   observation
-#' @param offset A vector of length `nobs` that is included in the
-#'   linear predictor (a `nobs` by `nc` matrix for the `"multinomial"`
-#'   family).  Useful for the `"poisson"` family (e.g. log of exposure
-#'   time), or for refining a model by starting at a current
-#'   fit. Default is `NULL`. If supplied, then values must also be
-#'   supplied to the `predict` function.
-#' @param alpha The elasticnet mixing parameter, with \eqn{0 \le
-#'   \alpha \le 1}.  The penalty is defined as
-#'   \deqn{(1-\alpha)/2||\beta||_2^2+\alpha||\beta||_1.}  `alpha = 1`
-#'   is the lasso penalty, and `alpha = 0` the ridge penalty.
-#'   `lambda.min.ratio`. Supplying a value of lambda overrides this.
-#' @param nlambda The number of lambda values, default is 100.
-#' @param lambda.min.ratio Smallest value for lambda as a fraction of
-#'   lambda.max, the (data derived) entry value (i.e. the smallest
-#'   value for which all coefficients are zero). The default depends
-#'   on the sample size `nobs` relative to the number of variables
-#'   `nvars`. If `nobs >= nvars`, the default is 0.0001, close to
-#'   zero. If `nobs < nvars`, the default is 0.01.  A very small value
-#'   of `lambda.min.ratio` will lead to a saturated fit in the `nobs <
-#'   nvars` case. This is undefined for some families of models, and
-#'   the function will exit gracefully when the percentage deviance
-#'   explained is almost 1.
-#' @param mvlambda A user supplied `lambda` sequence. Typical usage is
-#'   to have the program compute its own `lambda` sequence based on
-#'   `nlambda` and `lambda.min.ratio`. Supplying a value of `lambda`
-#'   overrides this. WARNING: use with care. Avoid supplying a single
-#'   value for `lambda` (for predictions after CV use `predict()`
-#'   instead).  Supply instead a decreasing sequence of `lambda`
-#'   values. `glmnet` relies on its warms starts for speed, and its
-#'   often faster to fit a whole path than compute a single fit.
-#' @param standardize Logical flag for `x` variable standardization,
-#'   prior to fitting the model sequence. The coefficients are always
-#'   returned on the original scale. Default is `standardize =
-#'   TRUE`. If variables are in the same units already, you might not
-#'   wish to standardize.
-#' @param intercept Should intercept be fitted (default `TRUE`) or set
-#'   to zero (`FALSE`)?
-#' @param thresh Convergence threshold for coordinate descent. Each
-#'   inner coordinate-descent loop continues until the maximum change
-#'   in the objective after any coefficient update is less than thresh
-#'   times the null deviance.  Default value is `1e-7`.
-#' @param exclude List of column indices of `x` matrices in `x_list`
-#'   to be excluded from the model. Default is empty list. Equivalent
-#'   to an infinite penalty factor for the variables excluded (next
-#'   item).  Users can supply instead an `exclude()` function that
-#'   generates the list of `x` columns indices.  This function is most
-#'   generally defined as `function(x_list, y, weights, ...)`, and is
-#'   called inside [multiview()] to generate the indices for excluded
-#'   variables.  The `...` argument is required, the others are
-#'   optional.  This is useful for filtering wide data, and works
-#'   correctly with `cv.multiview`.  See the vignette 'Introduction'
-#'   for examples.
-#' @param penalty.factor List of separate penalty factors can be
-#'   applied to each coefficient, consisting of `ncol(x)` elements for
-#'   each `x` in `x_list`. This is a number that multiplies `lambda`
-#'   to allow differential shrinkage. Can be 0 for some variables,
-#'   which implies no shrinkage, and that variable is always included
-#'   in the model. Default is 1 for all variables (and implicitly
-#'   infinity for variables listed in `exclude`). Note: the penalty
-#'   factors are internally rescaled to sum to `nvars`.
-#' @param lower.limits Vector of lower limits for each coefficient
-#'   consisting of `ncol(x) elements for each `x` in `x_list`; default
-#'   `-Inf`. Each of these must be non-positive.
-#' @param upper.limits Vector of upper limits for each coefficient
-#'   consisting of `ncol(x) elements for each `x` in `x_list`; default
-#'   `Inf`. Each of these must be non-negative.
-#' @param maxit Maximum number of passes over the data for all lambda
-#'   values; default is 10^5.
-#' @param trace.it If `trace.it = 1`, then a progress bar is
-#'   displayed; useful for big models that take a long time to fit.
-#' @param x the cbinded matrices in `x_list`
-#' @return An object with class "multiview" "glmnetfit" and "glmnet"
+#' @inheritParams multiview
+#' @param x the `cbind`ed matrices in `x_list`
+#' @param nvars the number of variables (total)
+#' @param nobs the number of observations
+#' @param xm the column means vector (could be zeros if `standardize = FALSE`)
+#' @param xs the column std dev vector (could be 1s if `standardize = FALSE`)
+#' @param control the multiview control object
+#' @param vp the variable penalities (processed)
+#' @param vnames the variable names
+#' @param is.offset a flag indicating if offset is supplied or not
+#' @param user_lambda a flag indicating if user supplied the lambda sequence
+#' @param start_val the result of first call to `get_start`
+#' @return An object with class `"multiview"` `"glmnetfit"` and `"glmnet"`
 #' \item{a0}{Intercept sequence of length `length(lambda)`.}
 #' \item{beta}{A `nvars x length(lambda)` matrix of coefficients, stored in
 #' sparse matrix format.}
@@ -104,6 +32,7 @@
 #' largest lambda reported does not quite give the zero coefficients reported
 #' (lambda=inf would in principle). Instead, the largest lambda for alpha=0.001
 #' is used, and the sequence of lambda values is derived from this.}
+#' \item{lambda}{The sequence of lambda values}
 #' \item{mvlambda}{The corresponding sequence of multiview lambda values}
 #' \item{dev.ratio}{The fraction of (null) deviance explained. The deviance
 #' calculations incorporate weights if present in the model. The deviance is
@@ -132,207 +61,216 @@
 # # binomial with probit link
 # fit1 <- multiview:::multiview.path(list(x, z), y, family = binomial(link = "probit"),
 #                                    x = cbind(x, z))
-multiview.path <- function(x_list, y, rho = 0, weights = NULL, mvlambda = NULL, nlambda = 100,
-                           lambda.min.ratio = ifelse(nobs < nvars, 0.01, 0.0001),
+multiview.path <- function(x_list, y, rho = 0, weights = NULL,
+                           lambda, nlambda, user_lambda = FALSE,
                            alpha = 1.0, offset = NULL, family = gaussian(),
                            standardize = TRUE, intercept = TRUE, thresh = 1e-7, maxit = 100000,
                            penalty.factor = rep(1.0, nvars), exclude = integer(0), lower.limits = -Inf,
-                           upper.limits = Inf, trace.it = 0, x) {
+                           upper.limits = Inf, trace.it = 0, x, nvars, nobs, xm, xs, control, vp, vnames, start_val, is.offset) {
 
-    ### Check on family argument
-  if (is.function(family)) {
-    family <- family()
-  }
-  
-  ## Make lambda the multiview lambda
-  ## Allows use of mvlambda parameter for idempotence.
-  lambda <- mvlambda
-  
-  this.call <- match.call()
+## multiview.path <- function(x_list, y, rho = 0, weights = NULL, mvlambda = NULL, nlambda = 100,
+##                            lambda.min.ratio = ifelse(nobs < nvars, 0.01, 0.0001),
+##                            alpha = 1.0, offset = NULL, family = gaussian(),
+##                            standardize = TRUE, intercept = TRUE, thresh = 1e-7, maxit = 100000,
+##                            penalty.factor = rep(1.0, nvars), exclude = integer(0), lower.limits = -Inf,
+##                            upper.limits = Inf, trace.it = 0, x) {
 
-  ## ## Prepare to reuse glmnetFlex code
-  ## x <- do.call(cbind, x_list)
-
-  ## ## We need the std devs for other purposes, so we compute it
-  ## xsd <- apply(x, 2, sd)
-
-  ### Prepare all the generic arguments
-  ## if (alpha > 1) {
-  ##   warning("alpha > 1; set to 1")
-  ##   alpha = 1
-  ## } else if (alpha < 0) {
-  ##   warning("alpha < 0; set to 0")
-  ##   alpha = 0
+  ##   ### Check on family argument
+  ## if (is.function(family)) {
+  ##   family <- family()
   ## }
-  alpha = as.double(alpha)
+  
+  ## ## Make lambda the multiview lambda
+  ## ## Allows use of mvlambda parameter for idempotence.
+  ## lambda <- mvlambda
+  
+  ## this.call <- match.call()
 
-  this.call <- match.call()
+  ## ## ## Prepare to reuse glmnetFlex code
+  ## ## x <- do.call(cbind, x_list)
 
-  np = dim(x)
-  #if(is.null(np) || (np[2] <= 1)) stop("x should be a matrix with 2 or more columns")
-  nobs = as.integer(np[1]); nvars = as.integer(np[2])
+  ## ## ## We need the std devs for other purposes, so we compute it
+  ## ## xsd <- apply(x, 2, sd)
 
-  # get feature variable names
-  vnames=colnames(x)
-  #if(is.null(vnames))vnames=paste("V",seq(nvars),sep="")
+  ## ### Prepare all the generic arguments
+  ## ## if (alpha > 1) {
+  ## ##   warning("alpha > 1; set to 1")
+  ## ##   alpha = 1
+  ## ## } else if (alpha < 0) {
+  ## ##   warning("alpha < 0; set to 0")
+  ## ##   alpha = 0
+  ## ## }
+  ## alpha = as.double(alpha)
 
-  # check weights
-  if(is.null(weights)) weights = rep(1,nobs)
-  else if (length(weights) != nobs)
-    stop(paste("Number of elements in weights (",length(weights),
-               ") not equal to the number of rows of x (",nobs,")",sep=""))
-  weights <- as.double(weights)
+  ## np = dim(x)
+  ## #if(is.null(np) || (np[2] <= 1)) stop("x should be a matrix with 2 or more columns")
+  ## nobs = as.integer(np[1]); nvars = as.integer(np[2])
 
-  ## initialize from family function. Makes y a vector in case of binomial, and possibly changes weights
-  ## Expects nobs to be defined, and creates n and mustart (neither used here)
-  ## Some cases expect to see things, so we set it up just to make it work
-  etastart=0;mustart=NULL;start=NULL
-  eval(family$initialize)
-  ##
-  ## Just in case this was not done in initialize()
-  y <- drop(y)  # we don't like matrix responses
+  ## # get feature variable names
+  ## vnames=colnames(x)
+  ## #if(is.null(vnames))vnames=paste("V",seq(nvars),sep="")
 
-  is.offset <- !(is.null(offset))
-  if (is.offset == FALSE) {
-    offset <- as.double(y * 0) #keeps the shape of y
-  }
-  # infinite penalty factor vars are excluded
-  if(any(penalty.factor == Inf)) {
-    exclude = c(exclude, seq(nvars)[penalty.factor == Inf])
-    exclude = sort(unique(exclude))
-  }
+  ## # check weights
+  ## if(is.null(weights)) weights = rep(1,nobs)
+  ## else if (length(weights) != nobs)
+  ##   stop(paste("Number of elements in weights (",length(weights),
+  ##              ") not equal to the number of rows of x (",nobs,")",sep=""))
+  ## weights <- as.double(weights)
 
-  ## Compute weighted mean and variance of columns of x, sensitive to sparse matrix
-  ## needed to detect constant columns below, and later if standarization
-  meansd <- weighted_mean_sd(x, weights)
+  ## ## initialize from family function. Makes y a vector in case of binomial, and possibly changes weights
+  ## ## Expects nobs to be defined, and creates n and mustart (neither used here)
+  ## ## Some cases expect to see things, so we set it up just to make it work
+  ## etastart=0;mustart=NULL;start=NULL
+  ## eval(family$initialize)
+  ## ##
+  ## ## Just in case this was not done in initialize()
+  ## y <- drop(y)  # we don't like matrix responses
 
-  ## look for constant variables, and if any, then add to exclude
-  const_vars <- meansd$sd == 0
-  nzvar <- setdiff(which(!const_vars), exclude)
-  # if all the non-excluded variables have zero variance, throw error
-  if (length(nzvar) == 0) stop("All used predictors have zero variance")
+  ## is.offset <- !(is.null(offset))
+  ## if (is.offset == FALSE) {
+  ##   offset <- as.double(y * 0) #keeps the shape of y
+  ## }
+  ## # infinite penalty factor vars are excluded
+  ## if(any(penalty.factor == Inf)) {
+  ##   exclude = c(exclude, seq(nvars)[penalty.factor == Inf])
+  ##   exclude = sort(unique(exclude))
+  ## }
 
-  ## if any constant vars, add to exclude
-  if(any(const_vars)) {
-    exclude <- sort(unique(c(which(const_vars),exclude)))
-    meansd$sd[const_vars] <- 1.0 ## we divide later, and do not want bad numbers
-  }
-  if(length(exclude) > 0) {
-    jd = match(exclude, seq(nvars), 0)
-    if(!all(jd > 0)) stop ("Some excluded variables out of range")
-    penalty.factor[jd] = 1 # ow can change lambda sequence
-  }
-  # check and standardize penalty factors (to sum to nvars)
-  vp = pmax(0, penalty.factor)
-  if (max(vp) <= 0) stop("All penalty factors are <= 0")
-  vp = as.double(vp * nvars / sum(vp))
+  ## ## Compute weighted mean and variance of columns of x, sensitive to sparse matrix
+  ## ## needed to detect constant columns below, and later if standarization
+  ## meansd <- weighted_mean_sd(x, weights)
+
+  ## ## look for constant variables, and if any, then add to exclude
+  ## const_vars <- meansd$sd == 0
+  ## nzvar <- setdiff(which(!const_vars), exclude)
+  ## # if all the non-excluded variables have zero variance, throw error
+  ## if (length(nzvar) == 0) stop("All used predictors have zero variance")
+
+  ## ## if any constant vars, add to exclude
+  ## if(any(const_vars)) {
+  ##   exclude <- sort(unique(c(which(const_vars),exclude)))
+  ##   meansd$sd[const_vars] <- 1.0 ## we divide later, and do not want bad numbers
+  ## }
+  ## if(length(exclude) > 0) {
+  ##   jd = match(exclude, seq(nvars), 0)
+  ##   if(!all(jd > 0)) stop ("Some excluded variables out of range")
+  ##   penalty.factor[jd] = 1 # ow can change lambda sequence
+  ## }
+  ## # check and standardize penalty factors (to sum to nvars)
+  ## vp = pmax(0, penalty.factor)
+  ## if (max(vp) <= 0) stop("All penalty factors are <= 0")
+  ## vp = as.double(vp * nvars / sum(vp))
 
 
-  ### check on limits
-  control <- multiview.control()
-  if (thresh >= control$epsnr)
-    warning("thresh should be smaller than multiview.control()$epsnr",
-            call. = FALSE)
+  ## ### check on limits
+  ## control <- multiview.control()
+  ## if (thresh >= control$epsnr)
+  ##   warning("thresh should be smaller than multiview.control()$epsnr",
+  ##           call. = FALSE)
 
-  if(any(lower.limits > 0)){ stop("Lower limits should be non-positive") }
-  if(any(upper.limits < 0)){ stop("Upper limits should be non-negative") }
-  lower.limits[lower.limits == -Inf] = -control$big
-  upper.limits[upper.limits == Inf] = control$big
-  if (length(lower.limits) < nvars) {
-    if(length(lower.limits) == 1) lower.limits = rep(lower.limits, nvars) else
-                                                                            stop("Require length 1 or nvars lower.limits")
-  } else lower.limits = lower.limits[seq(nvars)]
-  if (length(upper.limits) < nvars) {
-    if(length(upper.limits) == 1) upper.limits = rep(upper.limits, nvars) else
-                                                                            stop("Require length 1 or nvars upper.limits")
-  } else upper.limits = upper.limits[seq(nvars)]
+  ## if(any(lower.limits > 0)){ stop("Lower limits should be non-positive") }
+  ## if(any(upper.limits < 0)){ stop("Upper limits should be non-negative") }
+  ## lower.limits[lower.limits == -Inf] = -control$big
+  ## upper.limits[upper.limits == Inf] = control$big
+  ## if (length(lower.limits) < nvars) {
+  ##   if(length(lower.limits) == 1) lower.limits = rep(lower.limits, nvars) else
+  ##                                                                           stop("Require length 1 or nvars lower.limits")
+  ## } else lower.limits = lower.limits[seq(nvars)]
+  ## if (length(upper.limits) < nvars) {
+  ##   if(length(upper.limits) == 1) upper.limits = rep(upper.limits, nvars) else
+  ##                                                                           stop("Require length 1 or nvars upper.limits")
+  ## } else upper.limits = upper.limits[seq(nvars)]
 
-  if (any(lower.limits == 0) || any(upper.limits == 0)) {
-    ###Bounds of zero can mess with the lambda sequence and fdev;
-    ###ie nothing happens and if fdev is not zero, the path can stop
-    fdev <- multiview.control()$fdev
-    if(fdev!= 0) {
-      multiview.control(fdev = 0)
-      on.exit(multiview.control(fdev = fdev))
-    }
-  }
-  ### end check on limits
-  ### end preparation of generic arguments
+  ## if (any(lower.limits == 0) || any(upper.limits == 0)) {
+  ##   ###Bounds of zero can mess with the lambda sequence and fdev;
+  ##   ###ie nothing happens and if fdev is not zero, the path can stop
+  ##   fdev <- multiview.control()$fdev
+  ##   if(fdev!= 0) {
+  ##     multiview.control(fdev = 0)
+  ##     on.exit(multiview.control(fdev = fdev))
+  ##   }
+  ## }
+  ## ### end check on limits
+  ## ### end preparation of generic arguments
 
-  # standardize x if necessary
-  ## if (intercept) {
-  ##   xm <- meansd$mean
+  ## # standardize x if necessary
+  ## ## if (intercept) {
+  ## ##   xm <- meansd$mean
+  ## ## } else {
+  ## ##   xm <- rep(0.0, times = nvars)
+  ## ## }
+  ## ## We handle intercept ourselves!
+  ## xm <- rep(0.0, times = nvars)
+  ## if (standardize) {
+  ##   xs <- meansd$sd
   ## } else {
-  ##   xm <- rep(0.0, times = nvars)
+  ##   xs <- rep(1.0, times = nvars)
   ## }
-  ## We handle intercept ourselves!
-  xm <- rep(0.0, times = nvars)
-  if (standardize) {
-    xs <- meansd$sd
-  } else {
-    xs <- rep(1.0, times = nvars)
-  }
-  if (!inherits(x, "sparseMatrix")) {
-    x <- scale(x, xm, xs)
-  } else {
-    attr(x, "xm") <- xm
-    attr(x, "xs") <- xs
-  }
-  lower.limits <- lower.limits * xs
-  upper.limits <- upper.limits * xs
+  ## if (!inherits(x, "sparseMatrix")) {
+  ##   x <- scale(x, xm, xs)
+  ## } else {
+  ##   attr(x, "xm") <- xm
+  ##   attr(x, "xs") <- xs
+  ## }
+  ## lower.limits <- lower.limits * xs
+  ## upper.limits <- upper.limits * xs
 
-  # get null deviance and lambda max
-  start_val <- get_start(x, y, weights, family, intercept, is.offset,
-                         offset, exclude, vp, alpha)
+  ## # get null deviance and lambda max
+  ## start_val <- get_start(x, y, weights, family, intercept, is.offset,
+  ##                        offset, exclude, vp, alpha)
 
-  # work out lambda values
-  nlam = as.integer(nlambda)
-  user_lambda = FALSE   # did user provide their own lambda values?
-  if (is.null(lambda)) {
-    if (lambda.min.ratio >= 1) stop("lambda.min.ratio should be less than 1")
+  ## # work out lambda values
+  ## nlam = as.integer(nlambda)
+  ## user_lambda = FALSE   # did user provide their own lambda values?
+  ## if (is.null(lambda)) {
+  ##   if (lambda.min.ratio >= 1) stop("lambda.min.ratio should be less than 1")
 
-    # compute lambda max: to add code here
-    lambda_max <- start_val$lambda_max
+  ##   # compute lambda max: to add code here
+  ##   lambda_max <- start_val$lambda_max
 
-    # compute lambda sequence
-    ulam <- exp(seq(log(lambda_max), log(lambda_max * lambda.min.ratio),
-                    length.out = nlam))
-  } else {  # user provided lambda values
-    user_lambda = TRUE
-    if (any(lambda < 0)) stop("lambdas should be non-negative")
-    ulam = as.double(rev(sort(lambda)))
-    nlam = as.integer(length(lambda))
-  }
+  ##   # compute lambda sequence
+  ##   ulam <- exp(seq(log(lambda_max), log(lambda_max * lambda.min.ratio),
+  ##                   length.out = nlam))
+  ## } else {  # user provided lambda values
+  ##   user_lambda = TRUE
+  ##   if (any(lambda < 0)) stop("lambdas should be non-negative")
+  ##   ulam = as.double(rev(sort(lambda)))
+  ##   nlam = as.integer(length(lambda))
+  ## }
+
+
+  ### NOTA BENE
+  ## Up to this everything is already set up now because of standardization.
+  ## END OF NB
 
   # start progress bar
-  if (trace.it == 1) pb <- utils::txtProgressBar(min = 0, max = nlam, style = 3)
+  if (trace.it == 1) pb <- utils::txtProgressBar(min = 0, max = nlambda, style = 3)
 
   
-  glambda <- rep(1.0, nlam) # the actual glmnet lambda sequence, initially the scale factor
-  a0 <- rep(NA, length = nlam)
-  beta <- matrix(0, nrow = nvars, ncol = nlam)
-  dev.ratio <- rep(NA, length = nlam)
+  glambda <- rep(1.0, nlambda) # the actual glmnet lambda sequence, initially the scale factor
+  a0 <- rep(NA, length = nlambda)
+  beta <- matrix(0, nrow = nvars, ncol = nlambda)
+  dev.ratio <- rep(NA, length = nlambda)
   fit <- NULL
-  mnl <- min(nlam, control$mnlam)
-
-  cur_lambda <- ulam
-  cur_lambda[1] <- if(user_lambda) ulam[1] else control$big
-  for (k in 1:nlam) {
+  mnl <- min(nlambda, control$mnlam)
+  cur_lambda <- lambda
+  cur_lambda[1] <- if(user_lambda) lambda[1] else control$big
+  for (k in 1:nlambda) {
     # get the correct lambda value to fit
     ## if (k > 1) {
     ##   cur_lambda <- ulam[k]
     ## } else {
     ##   cur_lambda <- if(user_lambda) ulam[k] else control$big
     ## }
-    effective_lambda <- cur_lambda[k]
-    if (trace.it == 2) cat("Fitting lambda index", k, ":", ulam[k], fill = TRUE)
+    ## effective_lambda <- cur_lambda[k]
+    if (trace.it == 2) cat("Fitting lambda index", k, ":", lambda[k], fill = TRUE)
     fit <- multiview.fit(x_list = x_list,
                          x = x,
                          y = y,
                          rho = rho,
                          #weights = weights / sum(weights),
                          weights = weights,
-                         lambda = effective_lambda,
+                         lambda = cur_lambda[k],
                          alpha = alpha,
                          offset = offset,
                          family = family,
@@ -346,7 +284,8 @@ multiview.path <- function(x_list, y, rho = 0, weights = NULL, mvlambda = NULL, 
                          warm = fit,
                          from.multiview.path = TRUE,
                          save.fit = TRUE,
-                         trace.it = trace.it)
+                         trace.it = trace.it,
+                         user_lambda = user_lambda)
     if (trace.it == 1) utils::setTxtProgressBar(pb, k)
     # if error code non-zero, a non-fatal error must have occurred
     # print warning, ignore this lambda value and return result
@@ -380,30 +319,30 @@ multiview.path <- function(x_list, y, rho = 0, weights = NULL, mvlambda = NULL, 
   } # end of for(k in 1:nlam)
   
   if (trace.it == 1) {
-    utils::setTxtProgressBar(pb, nlam)
+    utils::setTxtProgressBar(pb, nlambda)
     cat("", fill = TRUE)
   }
 
   # truncate a0, beta, dev.ratio, lambda if necessary
-  if (k < nlam) {
+  if (k < nlambda) {
     indices <- 1:k
     a0 <- a0[indices]
     beta <- beta[, indices, drop = FALSE]
     dev.ratio <- dev.ratio[indices]
-    ulam <- ulam[indices]
+    lambda <- lambda[indices]
     glambda <- glambda[indices]
   }
 
   ## So far glambda has merely been the scaling factor. Now fix it
   ## to reflect what it actually should be.
-  glambda <- glambda * ulam
+  glambda <- glambda * lambda
   
   # return coefficients to original scale (because of x standardization)
   beta <- beta / xs
   a0 <- a0 - colSums(beta * xm)
 
   # output
-  stepnames <- paste0("s", 0:(length(ulam) - 1))
+  stepnames <- paste0("s", 0:(length(lambda) - 1))
   out <- list()
   out$a0 <- a0
   names(out$a0) <- stepnames
@@ -423,7 +362,7 @@ multiview.path <- function(x_list, y, rho = 0, weights = NULL, mvlambda = NULL, 
   ## as mvlambda, so that using mvlambda in the call will always guarantee idempotence
   ##
   out$lambda <- glambda
-  out$mvlambda <- ulam
+  out$mvlambda <- lambda
   ##
   ##
   out$dev.ratio <- dev.ratio
@@ -431,7 +370,7 @@ multiview.path <- function(x_list, y, rho = 0, weights = NULL, mvlambda = NULL, 
   out$npasses <- fit$npasses
   out$jerr <- fit$jerr
   out$offset <- is.offset
-  out$call <- this.call
+  ## out$call <- this.call
   out$family <- family
   out$nobs <- nobs
   ## ## We also need the standard deviations
@@ -526,7 +465,7 @@ multiview.fit <- function(x_list, x, y, rho, weights, lambda, alpha = 1.0,
                           intercept = TRUE, thresh = 1e-7, maxit = 100000,
                           penalty.factor = rep(1.0, nvars), exclude = c(), lower.limits = -Inf,
                           upper.limits = Inf, warm = NULL, from.multiview.path = FALSE,
-                          save.fit = FALSE, trace.it = 0) {
+                          save.fit = FALSE, trace.it = 0, user_lambda = FALSE) {
   this.call <- match.call()
   control <- multiview.control()
 
@@ -534,17 +473,6 @@ multiview.fit <- function(x_list, x, y, rho, weights, lambda, alpha = 1.0,
   p_x  <- lapply(x_list, ncol)
   ends  <- cumsum(p_x)
   starts  <- c(1, ends[-nviews] + 1)
-
-  beta_indices <- mapply(seq.int, starts, ends, SIMPLIFY = FALSE)
-  pairs <- apply(utils::combn(nviews, 2), 2, identity, simplify = FALSE)
-  view_components <- lapply(pairs,
-                            function(pair) {
-                              i  <- pair[1L]; j  <- pair[2L];
-                              list(index = list(beta_indices[[i]], beta_indices[[j]]),
-                                   x = list(x_list[[i]], x_list[[j]]))
-                            })
-
-  #x <- do.call(cbind, x_list)
 
   ### Prepare all the generic arguments
   nobs <- nrow(x)
@@ -556,7 +484,19 @@ multiview.fit <- function(x_list, x, y, rho, weights, lambda, alpha = 1.0,
     offset <- rep(0, nobs)
     is.offset = FALSE
   }
-  # add xm and xs attributes if they are missing for sparse x
+ 
+  x_list <- lapply(split(seq_len(nvars), rep(seq_along(p_x), p_x)), function(ind) x[, ind])
+  
+  beta_indices <- mapply(seq.int, starts, ends, SIMPLIFY = FALSE)
+  pairs <- apply(utils::combn(nviews, 2), 2, identity, simplify = FALSE)
+  view_components <- lapply(pairs,
+                            function(pair) {
+                              i  <- pair[1L]; j  <- pair[2L];
+                              list(index = list(beta_indices[[i]], beta_indices[[j]]),
+                                   x = list(x_list[[i]], x_list[[j]]))
+                            })
+
+ # add xm and xs attributes if they are missing for sparse x
   # glmnet.fit assumes that x is already standardized. Any standardization
   # the user wants should be done beforehand.
 
@@ -587,14 +527,14 @@ multiview.fit <- function(x_list, x, y, rho, weights, lambda, alpha = 1.0,
   }
 
   ### check on limits
-  lower.limits[lower.limits == -Inf] = -control$big
-  upper.limits[upper.limits == Inf] = control$big
-  if (length(lower.limits) < nvars)
-    lower.limits = rep(lower.limits, nvars) else
-                                              lower.limits = lower.limits[seq(nvars)]
-  if (length(upper.limits) < nvars)
-    upper.limits = rep(upper.limits, nvars) else
-                                              upper.limits = upper.limits[seq(nvars)]
+  ## lower.limits[lower.limits == -Inf] = -control$big
+  ## upper.limits[upper.limits == Inf] = control$big
+  ## if (length(lower.limits) < nvars)
+  ##   lower.limits = rep(lower.limits, nvars) else
+  ##                                             lower.limits = lower.limits[seq(nvars)]
+  ## if (length(upper.limits) < nvars)
+  ##   upper.limits = rep(upper.limits, nvars) else
+  ##                                             upper.limits = upper.limits[seq(nvars)]
   ### end check on limits
   ### end preparation of generic arguments
 
@@ -718,7 +658,11 @@ multiview.fit <- function(x_list, x, y, rho, weights, lambda, alpha = 1.0,
 
     #cat(sprintf("SW is %f\n", w_sum))
     ## NOTE: sum(weights) below takes care of glmnet parameterization lambda -> lambda * n!
-    lambda2  <- lambda * sum_weights / w_sum
+    if (user_lambda) {
+      lambda2 <- lambda
+    } else {
+      lambda2  <- lambda * sum_weights / w_sum
+    }
     #print(w)
     #cat(sprintf("Sum wt: %f Our Lambda%f\n", w_sum, lambda2))
 
@@ -838,7 +782,11 @@ multiview.fit <- function(x_list, x, y, rho, weights, lambda, alpha = 1.0,
   ## Fix up a0 for coeff!
   fit$a0  <- start_int
   ## The scale below is used to determine the actual lambda seq for multiview
-  fit$lambda_scale <- sum_weights / w_sum
+  if (user_lambda) {
+    fit$lambda_scale <- 1
+  } else {
+    fit$lambda_scale <- sum_weights / w_sum
+  }
   # checks on convergence and fitted values
   if (!conv)
     warning("glmnet.fit: algorithm did not converge", call. = FALSE)

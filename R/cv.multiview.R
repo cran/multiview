@@ -55,16 +55,16 @@
 #' @param foldid an optional vector of values between 1 and `nfold`
 #'   identifying what fold each observation is in. If supplied,
 #'   `nfold` can be missing.
-#' @param mvlambda A user supplied `lambda` sequence, default
+#' @param lambda A user supplied `lambda` sequence, default
 #'   `NULL`. Typical usage is to have the program compute its own
-#'   `mvlambda` sequence. This sequence, in general, is different from
+#'   `lambda` sequence. This sequence, in general, is different from
 #'   that used in the [glmnet::glmnet()] call (named `lambda`). Note
 #'   that this is done for the full model (master sequence), and
 #'   separately for each fold.  The fits are then aligned using the
 #'   glmnet lambda sequence associated with the master sequence (see
 #'   the `alignment` argument for additional details). Adapting
-#'   `mvlambda` for each fold leads to better convergence. When
-#'   `mvlambda` is supplied, the same sequence is used everywhere, but
+#'   `lambda` for each fold leads to better convergence. When
+#'   `lambda` is supplied, the same sequence is used everywhere, but
 #'   in some GLMs can lead to convergence issues.
 #' @param alignment This is an experimental argument, designed to fix
 #'   the problems users were having with CV, with possible values
@@ -168,16 +168,15 @@
 #' @importFrom glmnet glmnet
 #' @importFrom stats median
 #' @export
-cv.multiview <- function(x_list, y, family = gaussian(), rho = 0, weights = NULL, offset = NULL, mvlambda = NULL,
+cv.multiview <- function(x_list, y, family = gaussian(), rho = 0, weights = NULL, offset = NULL, lambda = NULL,
                          type.measure = c("default", "mse", "deviance", "class", "auc", "mae", "C"),
                          nfolds = 10, foldid = NULL,  alignment = c("lambda", "fraction"),
                          grouped = TRUE, keep = FALSE, trace.it = 0, ...) {
-
   type.measure <-  match.arg(type.measure)
   alignment <- match.arg(alignment)
-  if (!is.null(mvlambda) && length(mvlambda) < 2)
+  if (!is.null(lambda) && length(lambda) < 2)
     stop("Need more than one value of lambda for cv.multiview")
-  if (!is.null(mvlambda) && alignment == "fraction"){
+  if (!is.null(lambda) && alignment == "fraction"){
     warning("fraction of path alignment not available if lambda given as argument; switched to alignment=`lambda`")
     alignment <- "lambda"
   }
@@ -220,12 +219,15 @@ cv.multiview <- function(x_list, y, family = gaussian(), rho = 0, weights = NULL
   if (trace.it) cat("Training\n")
   multiview.object <- multiview(x_list = x_list, y = y, family = family, rho = rho,
                                 weights = weights, offset = offset,
-                                mvlambda = mvlambda,
+                                lambda = lambda,
                                 trace.it = trace.it, ...)
   multiview.object$call <- multiview.call
-  lognet_class <- multiview.object$family$family == "binomial"
+  lognet_class <- (!is.character(multiview.object$family)) && (multiview.object$family$family == "binomial")
+  coxnet_class <- (is.character(multiview.object$family)) && (multiview.object$family == "cox")
   if (lognet_class) {
     subclass <- "lognet"
+  } else if (coxnet_class) {
+    subclass <- "coxnet"
   } else {
     subclass <- class(multiview.object)[[1L]]
   }
@@ -248,7 +250,11 @@ cv.multiview <- function(x_list, y, family = gaussian(), rho = 0, weights = NULL
     if (trace.it) cat(sprintf("Fold: %d/%d\n", i, nfolds))
     which <-  (foldid == i)
     x_sub_list <- lapply(x_list, function(x) x[!which, , drop = FALSE])
-    y_sub <- y[!which, drop = FALSE]
+    if (is.matrix(y)) {
+      y_sub <- y[!which, ]
+    } else {
+      y_sub <- y[!which]
+    }
     if (is.null(weights)) {
       weights_sub <- NULL
     } else {
@@ -262,16 +268,21 @@ cv.multiview <- function(x_list, y, family = gaussian(), rho = 0, weights = NULL
     #dlist[[i]]  <- list(x = x_sub_list, y = y_sub)
     outlist[[i]] <- multiview(x_list = x_sub_list, y = y_sub, family = family, rho = rho,
                               weights = weights_sub, offset = offset_sub,
-                              mvlambda = mvlambda, trace.it = trace.it, ...)
+                              lambda = lambda, trace.it = trace.it, ...)
   }
   #saveRDS(dlist, "m_dlist.RDS")
   #saveRDS(outlist, "m_outlist.RDS")
   lambda <- multiview.object$lambda
   class(outlist) <- paste0(subclass, "list")
-
-  predmat <- build_predmat(outlist, lambda, x_list, offset, foldid, alignment, y = y, weights = weights,
-                           grouped = grouped, type.measure = type.measure, family = family(multiview.object)
-                           )
+  if (inherits(outlist, "coxnetlist")) {
+    predmat <- build_predmat_coxnetlist(outlist, lambda, x_list, offset, foldid, alignment, y = y,
+                                        weights = weights,
+                                        grouped = grouped, type.measure = type.measure,
+                                        family = family(multiview.object))
+  } else {
+    predmat <- build_predmat(outlist, lambda, x_list, offset, foldid, alignment, y = y, weights = weights,
+                             grouped = grouped, type.measure = type.measure, family = family(multiview.object))
+  }
   ### we include type.measure for the special case of coxnet with the deviance vs C-index discrepancy
   ### family is included for the new GLM crowd
   ### Next we compute the measures
@@ -282,6 +293,8 @@ cv.multiview <- function(x_list, y, family = gaussian(), rho = 0, weights = NULL
   ## cv.lognet in case of binomial.
   if (lognet_class) {
     cvstuff <- cv.lognet(predmat, y, type.measure, weights, foldid, grouped)
+  } else if (coxnet_class) {
+    cvstuff <- cv.coxnet(predmat, y, type.measure, weights, foldid, grouped)
   } else {
     #cvstuff <- do.call(cv.glmnetfit, list(predmat, y, type.measure, weights, foldid, grouped))
     cvstuff <- cv.glmnetfit(predmat, y, type.measure, weights, foldid, grouped)

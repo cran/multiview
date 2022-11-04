@@ -418,7 +418,7 @@ For logistic regression, `cv.multiview` has similar arguments and usage as Gauss
 
 For example, the code below uses "deviance" as the criterion for 10-fold cross-validation:
 ```{r, warning=FALSE}
-cvfit <- cv.multiview(list(x=x,z=z), y, family = binomial(),
+cvfit <- cv.multiview(list(x = x, z = z), y, family = binomial(),
                       type.measure = "deviance", rho = 0.5)
 ```
 

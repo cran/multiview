@@ -139,7 +139,7 @@ multiview.control(factory = TRUE)
 predict(fit, newx = list(x[5:10,],z[5:10,]), type = "class", s = c(0.05, 0.01))
 
 ## ---- warning=FALSE-----------------------------------------------------------
-cvfit <- cv.multiview(list(x=x,z=z), y, family = binomial(),
+cvfit <- cv.multiview(list(x = x, z = z), y, family = binomial(),
                       type.measure = "deviance", rho = 0.5)
 
 ## -----------------------------------------------------------------------------

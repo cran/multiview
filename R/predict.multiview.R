@@ -84,7 +84,7 @@ predict.multiview <- function(object, newx, s = NULL,
     type <- "link"  # modify for type == 'class' only.
   }
 
-  if (missing(newoffset)) {
+  if (missing(newoffset) || is.null(newoffset)) {
     nfit <- NextMethod(newx = newxt, s = s, type = type, exact = exact, ...)
   } else {
     nfit <- NextMethod(newx = newxt, s = s, type = type, exact = exact, newoffset = newoffset, ...)

@@ -11,7 +11,7 @@ cv.multiview(
   rho = 0,
   weights = NULL,
   offset = NULL,
-  mvlambda = NULL,
+  lambda = NULL,
   type.measure = c("default", "mse", "deviance", "class", "auc", "mae", "C"),
   nfolds = 10,
   foldid = NULL,
@@ -36,23 +36,24 @@ a family function. Default is \link[stats:family]{stats::gaussian}. (See
 
 \item{rho}{the weight on the agreement penalty, default 0. \code{rho=0}
 is a form of early fusion, and \code{rho=1} is a form of late fusion.
-We recommend trying a few values of \code{rho} including 0, 0.1, 0.25, 0.5, and 1 first;
-sometimes \code{rho} larger than 1 can also be helpful.}
+We recommend trying a few values of \code{rho} including 0, 0.1, 0.25,
+0.5, and 1 first; sometimes \code{rho} larger than 1 can also be
+helpful.}
 
 \item{weights}{Observation weights; defaults to 1 per observation}
 
 \item{offset}{Offset vector (matrix) as in \code{multiview}}
 
-\item{mvlambda}{A user supplied \code{lambda} sequence, default
+\item{lambda}{A user supplied \code{lambda} sequence, default
 \code{NULL}. Typical usage is to have the program compute its own
-\code{mvlambda} sequence. This sequence, in general, is different from
+\code{lambda} sequence. This sequence, in general, is different from
 that used in the \code{\link[glmnet:glmnet]{glmnet::glmnet()}} call (named \code{lambda}). Note
 that this is done for the full model (master sequence), and
 separately for each fold.  The fits are then aligned using the
 glmnet lambda sequence associated with the master sequence (see
 the \code{alignment} argument for additional details). Adapting
-\code{mvlambda} for each fold leads to better convergence. When
-\code{mvlambda} is supplied, the same sequence is used everywhere, but
+\code{lambda} for each fold leads to better convergence. When
+\code{lambda} is supplied, the same sequence is used everywhere, but
 in some GLMs can lead to convergence issues.}
 
 \item{type.measure}{loss to use for cross-validation. Currently

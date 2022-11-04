@@ -3,9 +3,8 @@
 #'
 #' `multiview` uses [glmnet::glmnet()] to do most of its work and
 #' therefore takes many of the same parameters, but an intercept is
-#' always included, standardization is always done and several other
-#' parameters do not apply. Therefore they are always overridden and
-#' warnings issued.
+#' always included and several other parameters do not
+#' apply. Such inapplicable arguments are overridden and warnings issued.
 #' 
 #' The current code can be slow for "large" data sets, e.g. when the
 #' number of features is larger than 1000.  It can be helpful to see
@@ -15,8 +14,9 @@
 #' features to a smaller set, using the exclude option, with a filter
 #' function.
 #' 
-#' If there are missing values in the feature matrices: 
-#' we recommend that you center the columns of each feature matrix, and then fill in the missing values with 0.
+#' If there are missing values in the feature matrices: we recommend
+#' that you center the columns of each feature matrix, and then fill
+#' in the missing values with 0.
 #' 
 #' For example, \cr
 #' `x <- scale(x,TRUE,FALSE)` \cr
@@ -33,12 +33,77 @@
 #'   (same) number of rows in each `x` matrix
 #' @param rho the weight on the agreement penalty, default 0. `rho=0`
 #'   is a form of early fusion, and `rho=1` is a form of late fusion.
-#'   We recommend trying a few values of `rho` including 0, 0.1, 0.25, 0.5, and 1 first; 
-#'   sometimes `rho` larger than 1 can also be helpful.
+#'   We recommend trying a few values of `rho` including 0, 0.1, 0.25,
+#'   0.5, and 1 first; sometimes `rho` larger than 1 can also be
+#'   helpful.
 #' @param family A description of the error distribution and link
 #'   function to be used in the model. This is the result of a call to
 #'   a family function. Default is [stats::gaussian]. (See
 #'   [stats::family] for details on family functions.)
+#' @param weights observation weights. Can be total counts if
+#'   responses are proportion matrices. Default is 1 for each
+#'   observation
+#' @param offset A vector of length \code{nobs} that is included in
+#'   the linear predictor (a \code{nobs x nc} matrix for the
+#'   \code{"multinomial"} family).  Useful for the \code{"poisson"}
+#'   family (e.g. log of exposure time), or for refining a model by
+#'   starting at a current fit. Default is \code{NULL}. If supplied,
+#'   then values must also be supplied to the \code{predict} function.
+#' @param alpha The elasticnet mixing parameter, with
+#'   \eqn{0\le\alpha\le 1}.  The penalty is defined as
+#'   \deqn{(1-\alpha)/2||\beta||_2^2+\alpha||\beta||_1.}
+#'   \code{alpha=1} is the lasso penalty, and \code{alpha=0} the ridge
+#'   penalty.
+#' @param nlambda The number of \code{lambda} values - default is 100.
+#' @param lambda.min.ratio Smallest value for \code{lambda}, as a
+#'   fraction of \code{lambda.max}, the (data derived) entry value
+#'   (i.e. the smallest value for which all coefficients are
+#'   zero). The default depends on the sample size \code{nobs}
+#'   relative to the number of variables \code{nvars}. If \code{nobs >
+#'   nvars}, the default is \code{0.0001}, close to zero.  If
+#'   \code{nobs < nvars}, the default is \code{0.01}.  A very small
+#'   value of \code{lambda.min.ratio} will lead to a saturated fit in
+#'   the \code{nobs < nvars} case. This is undefined for
+#'   \code{"binomial"} and \code{"multinomial"} models, and
+#'   \code{glmnet} will exit gracefully when the percentage deviance
+#'   explained is almost 1.
+#' @param lambda A user supplied \code{lambda} sequence. Typical usage
+#'   is to have the program compute its own \code{lambda} sequence
+#'   based on \code{nlambda} and \code{lambda.min.ratio}. Supplying a
+#'   value of \code{lambda} overrides this. WARNING: use with
+#'   care. Avoid supplying a single value for \code{lambda} (for
+#'   predictions after CV use \code{predict()} instead).  Supply
+#'   instead a decreasing sequence of \code{lambda}
+#'   values. \code{glmnet} relies on its warms starts for speed, and
+#'   its often faster to fit a whole path than compute a single fit.
+#' @param standardize Logical flag for x variable standardization,
+#'   prior to fitting the model sequence. The coefficients are always
+#'   returned on the original scale. Default is
+#'   \code{standardize=TRUE}.  If variables are in the same units
+#'   already, you might not wish to standardize. See details below for
+#'   y standardization with \code{family="gaussian"}.
+#' @param intercept Should intercept(s) be fitted (default `TRUE`)
+#' @param thresh Convergence threshold for coordinate descent. Each
+#'   inner coordinate-descent loop continues until the maximum change
+#'   in the objective after any coefficient update is less than
+#'   \code{thresh} times the null deviance. Defaults value is
+#'   \code{1E-7}.
+#' @param penalty.factor Separate penalty factors can be applied to
+#'   each coefficient. This is a number that multiplies \code{lambda}
+#'   to allow differential shrinkage. Can be 0 for some variables,
+#'   which implies no shrinkage, and that variable is always included
+#'   in the model. Default is 1 for all variables (and implicitly
+#'   infinity for variables listed in \code{exclude}). Note: the
+#'   penalty factors are internally rescaled to sum to nvars, and the
+#'   lambda sequence will reflect this change.
+#' @param lower.limits Vector of lower limits for each coefficient;
+#'   default \code{-Inf}. Each of these must be non-positive. Can be
+#'   presented as a single value (which will then be replicated), else
+#'   a vector of length \code{nvars}
+#' @param upper.limits Vector of upper limits for each coefficient;
+#'   default \code{Inf}. See \code{lower.limits}
+#' @param maxit Maximum number of passes over the data for all lambda
+#'   values; default is 10^5.
 #' @param exclude Indices of variables to be excluded from the
 #'   model. Default is none. Equivalent to an infinite penalty factor
 #'   for the variables excluded (next item).  Users can supply instead
@@ -47,19 +112,20 @@
 #'   and is called inside `multiview` to generate the indices for
 #'   excluded variables.  The `...` argument is required, the others
 #'   are optional.  This is useful for filtering wide data, and works
-#'   correctly with `cv.glmnet`.
-#' @param mvlambda A user supplied `lambda` sequence, default
+#'   correctly with `cv.multiview`. See the vignette 'Introduction'
+#'   for examples.
+#' @param lambda A user supplied `lambda` sequence, default
 #'   `NULL`. Typical usage is to have the program compute its own
-#'   `mvlambda` sequence. This sequence, in general, is different from
+#'   `lambda` sequence. This sequence, in general, is different from
 #'   that used in the [glmnet::glmnet()] call (named `lambda`)
-#'   Supplying a value of `mvlambda` overrides this. WARNING: use with
-#'   care. Avoid supplying a single value for `mvlambda` (for
+#'   Supplying a value of `lambda` overrides this. WARNING: use with
+#'   care. Avoid supplying a single value for `lambda` (for
 #'   predictions after CV use [stats::predict()] instead.  Supply
-#'   instead a decreasing sequence of `mvlambda` values as `multiview`
+#'   instead a decreasing sequence of `lambda` values as `multiview`
 #'   relies on its warms starts for speed, and its often faster to fit
 #'   a whole path than compute a single fit.
-#' @param ... further arguments to glmnet, some of which may be
-#'   overridden as noted above
+#' @param trace.it If \code{trace.it=1}, then a progress bar is
+#'   displayed; useful for big models that take a long time to fit.
 #' @return An object with S3 class `"multiview","*" `, where `"*"` is
 #'   `"elnet"`, `"lognet"`, `"multnet"`, `"fishnet"` (poisson),
 #'   `"coxnet"` or `"mrelnet"` for the various types of models.
@@ -69,12 +135,13 @@
 #'   models, a `nvars x length(lambda)` matrix of coefficients, stored
 #'   in sparse column format (`"CsparseMatrix"`). For `"multnet"` and
 #'   `"mgaussian"`, a list of `nc` such matrices, one for each class.}
-#'   \item{lambda}{The actual sequence of [glmnet::glmnet()] `lambda` values used. When
-#'   `alpha=0`, the largest lambda reported does not quite give the
-#'   zero coefficients reported (`lambda=inf` would in principle).
-#'   Instead, the largest `lambda` for `alpha=0.001` is used, and the
-#'   sequence of `lambda` values is derived from this.}
-#' \item{mvlambda}{The corresponding sequence of multiview lambda values}
+#'   \item{lambda}{The actual sequence of [glmnet::glmnet()] `lambda`
+#'   values used. When `alpha=0`, the largest lambda reported does not
+#'   quite give the zero coefficients reported (`lambda=inf` would in
+#'   principle).  Instead, the largest `lambda` for `alpha=0.001` is
+#'   used, and the sequence of `lambda` values is derived from this.}
+#'   \item{lambda}{The sequence of lambda values} \item{mvlambda}{The
+#'   corresponding sequence of multiview lambda values}
 #'   \item{dev.ratio}{The fraction of (null) deviance explained (for
 #'   `"elnet"`, this is the R-square). The deviance calculations
 #'   incorporate weights if present in the model. The deviance is
@@ -136,9 +203,30 @@
 #' @importFrom glmnet glmnet
 #' @importFrom stats family gaussian sd weighted.mean
 #' @export
-multiview <- function(x_list, y, rho = 0, family = gaussian(), 
-                      exclude = NULL, mvlambda = NULL, ...) {
+multiview <- function(x_list, y, rho = 0, family = gaussian(), weights = NULL, offset = NULL,
+                      alpha = 1.0, nlambda = 100, lambda.min.ratio = ifelse(nobs < nvars, 0.01, 0.0001),
+                      lambda = NULL, standardize = TRUE, intercept = TRUE, thresh = 1e-7,
+                      maxit = 100000, penalty.factor = rep(1.0, nvars), exclude = list(), lower.limits = -Inf,
+                      upper.limits = Inf, trace.it = 0) {
+
+  ## TODO: alpha = 1.0, stdize = TRUE, intercept = TRUE, exclude if list of ints have to be checked
   this.call <- match.call()
+
+  ## TODO: CLEAN up
+  mvlambda <- lambda
+  is.offset <- !(is.null(offset))
+
+  cox_case <- gaussian_case <- FALSE
+  if (is.function(family)) {
+    family <- family()
+  }
+  if (inherits(family, "family")) {
+    gaussian_case <- (family$family == "gaussian" && family$link == "identity")
+  } else if (is.character(family) && family == "cox") {
+    cox_case <- TRUE
+  } else {
+    stop("multiview: family must be a family function or the string 'cox'")
+  }
 
   ### Need to do this first so defaults in call can be satisfied
 
@@ -182,122 +270,318 @@ multiview <- function(x_list, y, rho = 0, family = gaussian(),
 
   nvars <- Reduce(f = sum, p_x)
 
-  ## Prepare to reuse glmnetFlex code
-  x <- do.call(cbind, x_list)
-  ## We need the std devs for other purposes, so we compute it
-  xsd <- apply(x, 2, sd)
+  ## ## Prepare to reuse glmnetFlex code
+  ## x <- do.call(cbind, x_list)
+  ## ## We need the std devs for other purposes, so we compute it
+  ## ## TODO: Make this take weights in to account
+  ## xsd <- apply(x, 2, sd)
 
   ## Handle exclude like in glmnet
-  if(is.function(exclude)) exclude <- process.exclude(exclude(x_list = x_list, y = y, ...), p_x)
-
-  ## Ensure that some arguments are ignored or kept at default values for glmnet
-  glmnet_args  <- list(...)
-  ## Use of the args below will emit a warning
-  forced_args  <- list(intercept = TRUE, standardize = TRUE, standardize.response = FALSE, relax = FALSE, alpha = 1.0)
-  specified_args <- intersect(names(glmnet_args), names(forced_args))
-  if (length(specified_args) > 0) {
-    for (arg in specified_args) {
-      if (glmnet_args[[arg]] != forced_args[[arg]]) {
-        glmnet_args[[arg]] <- forced_args[[arg]]
-        warning(sprintf("multiview: overriding specified %s to %s", arg, forced_args[[arg]]))
-      }
+  if (is.null(exclude) || length(exclude) == 0) {
+    exclude <- integer(0)
+  } else {
+    if (is.function(exclude)) {
+      exclude <- exclude(x_list = x_list, y = y, weights = weights)
     }
+    exclude <- process_exclude(exclude, p_x)
   }
-
-  ## Glmnet lambda is never specifiable.
-  if (!is.null(glmnet_args$lambda)) {
-    warning("multiview: glmnet lambda is computed internally, so ignored")
-    glmnet_args$lambda <- NULL
-  }
-
-  ## Internally, of course, we standardize, but our call to glmnet
-  ## needs to have standardize = FALSE. Yes, this is bloody confusing
-  ## and we can go mad if we muck this up!
-  glmnet_args$standardize <- FALSE
-
-  ## direct_call <- (family$family == "gaussian" && family$link == "identity")
-  ## if (direct_call) {
-  ##   arg_list  <- c(list(x = x, y = y, rho  = rho, family = family),
-  ##                  glmnet_args)
-  ##   fit <- do.call(glmnet::glmnet, arg_list)
-  ##   ## Ensure the mvlambda is updated to reflect value used in glmnet call
-  ##   fit$mvlambda <- fit$lambda
-  ## }
-
-  gaussian_case <- (family$family == "gaussian" && family$link == "identity")
   
   if (rho > 0 && nviews > 1L) {
+    ## Compute some things as we reuse them over and over again
+    alpha <- as.double(alpha)
+    
+    # get feature variable names
+    vnames <- unlist(mapply(paste, names(x_list), colnames_list, sep=":"))
+    
+    #if(is.null(vnames))vnames=paste("V",seq(nvars),sep="")
+    
+    # check weights
+    if(is.null(weights)) {
+      weights <- rep(1.0, nobs)
+    } else {
+      if (length(weights) != nobs)
+        stop(paste("Number of elements in weights (",length(weights),
+                   ") not equal to the number of rows of x (",nobs,")",sep=""))
+      weights <- as.double(weights)
+    }
+    
+    ## initialize from family function. Makes y a vector in case of binomial, and possibly changes weights
+    ## Expects nobs to be defined, and creates n and mustart (neither used here)
+    ## Some cases expect to see things, so we set it up just to make it work
+    if (!is.character(family)) {
+      etastart <- 0; mustart <- NULL; start <- NULL
+      eval(family$initialize)
+      
+      ## Also make sure intercept is true
+      if (!intercept) {
+        ## BN TODO: Why not remove intercept as an option since we totally control it??
+        warning("multiview: overriding intercept to TRUE for glm families")
+        intercept <- TRUE
+      }
+    } else {
+      ## We ignore intercept for Cox
+      intercept <- FALSE
+    }
+    
+    if (!is.offset) {
+      #offset <- as.double(y * 0) #keeps the shape of y
+      #offset <- rep(0, times = nrow(y))  # for cox
+      offset <- numeric(nobs)
+    }
+    
+    # infinite penalty factor vars are excluded
+    exclude <- c(exclude, seq(nvars)[penalty.factor == Inf])
+    exclude <- sort(unique(exclude))
+    
+    ## Compute weighted mean and variance of columns of x, sensitive to sparse matrix
+    ## needed to detect constant columns below, and later if standarization
+    ##meansd <- weighted_mean(x, weights)
+
+    mv_meansd <- lapply(x_list, weighted_mean_sd, weights = weights)
+    col_means_list <- lapply(mv_meansd, function(x) x$mean)
+    col_means <- unlist(col_means_list)
+    col_sd_list <- lapply(mv_meansd, function(x) x$sd)
+    col_sd <- unlist(col_sd_list)
+    
+    ## look for constant variables, and if any, then add to exclude
+    const_vars <- col_sd == 0
+    nzvar <- setdiff(which(!const_vars), exclude)
+    # if all the non-excluded variables have zero variance, throw error
+    if (length(nzvar) == 0) stop("All used predictors have zero variance")
+    
+    ## if any constant vars, add to exclude
+    if(any(const_vars)) {
+      exclude <- sort(unique(c(which(const_vars),exclude)))
+      col_sd[const_vars] <- 1.0 ## we divide later, and do not want bad numbers
+    }
+    if(length(exclude) > 0) {
+      jd <- match(exclude, seq(nvars), 0)
+      if(!all(jd > 0)) stop ("Some excluded variables out of range")
+      penalty.factor[jd] <- 1 # ow can change lambda sequence
+    }
+    # check and standardize penalty factors (to sum to nvars)
+    vp <- pmax(0, penalty.factor)
+    if (max(vp) <= 0) stop("All penalty factors are <= 0")
+    vp <- as.double(vp * nvars / sum(vp))
+    
+    ### check on limits
+    control <- multiview.control()
+    if (thresh >= control$epsnr)
+      warning("thresh should be smaller than multiview.control()$epsnr",
+              call. = FALSE)
+    
+    if (any(lower.limits > 0)) {
+      stop("Lower limits should be non-positive")
+    }
+    if (any(upper.limits < 0)) {
+      stop("Upper limits should be non-negative")
+    }
+    lower.limits[lower.limits == -Inf] <- -control$big
+    upper.limits[upper.limits == Inf] <- control$big
+    if (length(lower.limits) < nvars) {
+      if (length(lower.limits) == 1) {
+        lower.limits <- rep(lower.limits, nvars)
+      } else {
+        stop("Require length 1 or nvars lower.limits")
+      }
+    } else {
+      lower.limits <- lower.limits[seq(nvars)]
+    }
+    if (length(upper.limits) < nvars) {
+      if (length(upper.limits) == 1) {
+        upper.limits = rep(upper.limits, nvars)
+      } else {
+        stop("Require length 1 or nvars upper.limits")
+      }
+    } else {
+      upper.limits <- upper.limits[seq(nvars)]
+    }
+    
+    if (any(lower.limits == 0) || any(upper.limits == 0)) {
+      ###Bounds of zero can mess with the lambda sequence and fdev;
+      ###ie nothing happens and if fdev is not zero, the path can stop
+      fdev <- multiview.control()$fdev
+      if(fdev!= 0) {
+        multiview.control(fdev = 0)
+        on.exit(multiview.control(fdev = fdev))
+      }
+    }
+    ### end check on limits
+    ### end preparation of generic arguments
+    # standardize x if necessary
+    
+    if (intercept) {
+      xm <- col_means
+      xm_list <- col_means_list
+    } else {
+      xm <- rep(0.0, times = nvars)
+      xm_list<- lapply(p_x, numeric)
+    }
+    if (standardize) {
+      xs <- col_sd
+      xs_list <- col_sd_list
+    } else {
+      xs <- rep(1.0, times = nvars)
+      xs_list <- lapply(p_x, rep, x = 1.0)
+    }
+    if (any(sapply(x_list, inherits, what = "sparseMatrix"))) {
+      ## TODO: Something else needs to be done for SPARSE MATRIX
+      nx_list <- x_list
+      x <- do.call(cbind, x_list)
+      attr(x, "xm") <- xm
+      attr(x, "xs") <- xs
+    } else {
+      nx_list <- mapply(scale, x_list, xm_list, xs_list, SIMPLIFY = FALSE)
+      x <- do.call(cbind, nx_list)
+    }
+    lower.limits <- lower.limits * xs
+    upper.limits <- upper.limits * xs
+
 
     ## See whether this is a call to cox or not
     ## Better way is to check for a family object... see ?family
-    if (is.character(family)) {
-      if (family != "cox") {
-        stop("multiview: family must be a family function or the string 'cox'")
-      }
-      ## fit <- multiview.cox.path(x_list, y, weights, offset, alpha, nlambda, lambda.min.ratio,
-      ##                           lambda, standardize, thresh, exclude, penalty.factor,
-      ##                           lower.limits, upper.limits, maxit, trace.it, ...)
-      stop("multiview: Penalized Cox model not implemented yet!")
+    if (cox_case) {
+      ## fit <- multiview.cox.path(x_list = x_list, y = y, rho = rho, weights = weights, lambda = lambda,
+      ##                           offset = offset, alpha = alpha, nlambda = nlambda,
+      ##                           lambda.min.ratio = lambda.min.ratio,
+      ##                           standardize = standardize, intercept = intercept,
+      ##                           thresh = thresh, exclude = exclude, penalty.factor = penalty.factor,
+      ##                           lower.limits = lower.limits, upper.limits = upper.limits, maxit = maxit,
+      ##                           trace.it = 0, x = x)
+        fit <- multiview.cox.path(x_list = nx_list, x = x, y = y, rho = rho, weights = weights,
+                              lambda = lambda, nlambda = nlambda,
+                              lambda.min.ratio = lambda.min.ratio,
+                              alpha = alpha, offset = offset,
+                              standardize = standardize, intercept = intercept,
+                              thresh = thresh, maxit = maxit, penalty.factor = vp,
+                              exclude = exclude,
+                              lower.limits = lower.limits,
+                              upper.limits = upper.limits,
+                              trace.it = trace.it,
+                              nvars = nvars, nobs = nobs, xm = xm, xs = xs, control = control, vp = vp, vnames = vnames,
+                              is.offset = is.offset)
+
+      fit$mvlambda <- fit$lambda  ## Iffy!      
     } else { ##
+
+      # get null deviance and lambda max
+      start_val <- get_start(x, y, weights, family, intercept, is.offset,
+                             offset, exclude, vp, alpha)
+      
+      # work out lambda values
+      nlam <- as.integer(nlambda)
+      user_lambda <- FALSE   # did user provide their own lambda values?
+      if (is.null(lambda)) {
+        if (lambda.min.ratio >= 1) stop("lambda.min.ratio should be less than 1")
+        
+        # compute lambda max: to add code here
+        lambda_max <- start_val$lambda_max
+        
+        # compute lambda sequence
+        ulam <- exp(seq(log(lambda_max), log(lambda_max * lambda.min.ratio),
+                        length.out = nlam))
+      } else {  # user provided lambda values
+        user_lambda <- TRUE
+        if (any(lambda < 0)) stop("lambdas should be non-negative")
+        ulam <- as.double(rev(sort(lambda)))
+        nlam <- length(lambda)
+      }
+      
       if (gaussian_case) {
         ## Do a direct call
-        nx_list <- lapply(x_list, scale, center = TRUE, scale = FALSE)
-        xm <- unlist(lapply(nx_list, function(mat) attr(mat, "scaled:center")))
-        nx <- do.call(cbind, nx_list)
+        ## Assume dense matrix first!
         ymean <- mean(y)
         ends  <- cumsum(p_x)
         starts  <- c(1, ends[-nviews] + 1)
         beta_indices <- mapply(seq.int, starts, ends, SIMPLIFY = FALSE)
         pairs <- apply(utils::combn(nviews, 2), 2, identity, simplify = FALSE)
         npairs <- length(pairs)
+        ## The next line below is suboptimal for sparse matrices
+        ##nx_list <- lapply(split(seq_len(nvars), rep(seq_along(p_x), p_x)), function(ind) x[, ind])
         rows <- lapply(pairs, make_row, x_list = nx_list, p_x = p_x, rho = rho )
-        xt <- do.call(rbind, c(list(nx), rows))
-        ## yt <- c(y, rep(0, length(pairs) * nobs))
+        xt <- do.call(rbind, c(list(x), rows))
         yt <- c(y - ymean, rep(0, length(pairs) * nobs))
-        glmnet_args$standardize <- FALSE
-        glmnet_args$intercept <- FALSE
-        ## Weights have to be handled in a special way because we augment the x matrix
+        ## Weights, offsets have to be handled in a special way because we augment the x matrix
         ## We have to ensure it is of the right length!
-        if (!is.null(glmnet_args$weights)) {
-          glmnet_args$weights <- c(glmnet_args$weights, rep(glmnet_args$weights, npairs))
+        if (!is.null(weights)) {
+          weights <- c(weights, rep(weights, npairs))
         }
-        arg_list <- c(list(x = xt, y = yt, exclude = exclude, family = "gaussian"),
-                      glmnet_args)
-        fit <- do.call(glmnet::glmnet, arg_list)
+        if (is.offset) {
+          offset <- c(offset, rep(offset, npairs))
+        }
+        fit <- glmnet::glmnet(x = xt, y = yt, family = "gaussian", weights = weights, lambda = ulam, 
+                              offset = offset, alpha = alpha, nlambda = nlam,
+                              lambda.min.ratio = lambda.min.ratio,
+                              standardize = FALSE, intercept = FALSE, maxit = maxit,
+                              thresh = thresh, exclude = exclude, penalty.factor = penalty.factor,
+                              lower.limits = lower.limits, upper.limits = upper.limits,
+                              trace.it = trace.it)
         ## Fix up intercept due to scaling of x 
-        ## fit$a0 <- fit$a0 - colSums(as.matrix(fit$beta) * xm)
-        ## fit$a0 <- fit$a0 * (npairs + 1)
+        fit$beta <- fit$beta / xs
         fit$a0 <- ymean - colSums(as.matrix(fit$beta) * xm)
       } else {
-        arg_list  <- c(list(x_list = x_list, y = y, rho  = rho, family = family,
-                            exclude = exclude, mvlambda = mvlambda, x = x),
-                       glmnet_args)
-        fit <- do.call(multiview.path, arg_list)
-      }
-      fit$mvlambda <- fit$lambda  ## Iffy!      
+        ## All other cases besided std gaussian
+        ## arg_list  <- c(list(x_list = x_list, y = y, rho  = rho, family = family,
+        ##                     exclude = exclude, mvlambda = mvlambda, x = x),
+        ##                glmnet_args)
+        ## fit <- do.call(multiview.path, arg_list)
+        fit <- multiview.path(x_list = nx_list, x = x, y = y, rho = rho, weights = weights,
+                              lambda = ulam, nlambda = nlam,
+                              user_lambda = user_lambda, 
+                              ## lambda.min.ratio = lambda.min.ratio, ## Not needed any more
+                              alpha = alpha, offset = offset, family = family,
+                              standardize = standardize, intercept = intercept,
+                              thresh = thresh, maxit = maxit, penalty.factor = vp,
+                              exclude = exclude,
+                              lower.limits = lower.limits,
+                              upper.limits = upper.limits,
+                              trace.it = trace.it,
+                              nvars = nvars, nobs = nobs, xm = xm, xs = xs, control = control, vp = vp, vnames = vnames,
+                              start_val = start_val, is.offset = is.offset)
+
+        }
+      fit$mvlambda <- ulam ## TODO: CHECK
     }
   } else {
+
     ## rho <= 0 case, or early fusion.
+
+    ## Prepare to call glmnet
+    x <- do.call(cbind, x_list)
+    col_sd <- apply(x, 2, sd)
+    
     ## We dispatch to the old gaussian for speed (one less iteration)
-    our_family <- family
-    if (family$family == "gaussian" && family$link == "identity") our_family <- "gaussian"
-    glmnet_args$lambda <- mvlambda
-    arg_list  <- c(list(x = x, y = y, rho  = rho, family = our_family,
-                        exclude = exclude),
-                   glmnet_args)
-    fit <- do.call(glmnet::glmnet, arg_list)
+
+    if (gaussian_case) our_family <- "gaussian" else our_family <- family
+    if (cox_case) {
+      fit <- glmnet::glmnet(x = x, y = y, family = our_family, weights = weights, offset = offset,
+                            alpha = alpha, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio,
+                            lambda = lambda, standardize = standardize, ## intercept = intercept, ## NO intercept for Cox
+                            thresh = thresh, maxit = maxit, penalty.factor = penalty.factor,
+                            exclude = exclude, lower.limits = lower.limits,
+                            upper.limits = upper.limits, trace.it = trace.it)                           
+
+    } else {
+      fit <- glmnet::glmnet(x = x, y = y, family = our_family, weights = weights, offset = offset,
+                            alpha = alpha, nlambda = nlambda, lambda.min.ratio = lambda.min.ratio,
+                            lambda = lambda, standardize = standardize, intercept = intercept,
+                            thresh = thresh, maxit = maxit, penalty.factor = penalty.factor,
+                            exclude = exclude, lower.limits = lower.limits,
+                            upper.limits = upper.limits, trace.it = trace.it)
+    }
     ## Ensure the mvlambda is updated to reflect value used in glmnet call
     fit$mvlambda <- fit$lambda
   }
 
   fit$call <- this.call
+  fit$offset <- is.offset
   fit$p_x  <- p_x
   fit$colnames_list  <- colnames_list
   fit$rho <- rho
   fit$family <- family
-  fit$xsd <- xsd
+  fit$xsd <- col_sd
   class(fit) <- c("multiview", class(fit))
-  if (family$family == "binomial") {
+  if (!is.character(family) && family$family == "binomial") {
     ## set class names
     fit$classnames <- names(table(y))
   }
@@ -516,10 +800,10 @@ coef_ordered.multiview <- function(object, s = NULL, ...){
   coefs_nonzero[rev(order(abs(beta_std[which_nonzero]))), ]
 }
 
-process.exclude <- function(exclude, p_x) {
-  if ((length(exclude) != length(p_x)) ||
+process_exclude <- function(exclude, p_x) {
+  if (!is.list(exclude) && (length(exclude) != length(p_x)) ||
         (!all(mapply(function(p, ind) all(1 <= ind & ind <= p), p_x, exclude)))) {
-    stop("multiview: exclude should be list of column indices (possibly NULL) for each matrix in x_list")
+    stop("multiview: exclude list components do not match matrix dimensions in x_list")
   }
   exclude  <- lapply(exclude, unique)
   p_x  <- unlist(p_x)

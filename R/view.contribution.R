@@ -76,7 +76,7 @@
 view.contribution = function(x_list, y, family = gaussian(),
                              rho, s = c("lambda.min", "lambda.1se"),
                              eval_data = c('train', 'test'),
-                             weights = NULL, offset = NULL, mvlambda = NULL,
+                             weights = NULL, offset = NULL, 
                              type.measure = c("default", "mse", "deviance", "class", "auc", "mae", "C"),
                              x_list_test = NULL, test_y = NULL,
                              nfolds = 10, foldid = NULL,
