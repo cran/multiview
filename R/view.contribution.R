@@ -76,19 +76,19 @@
 view.contribution = function(x_list, y, family = gaussian(),
                              rho, s = c("lambda.min", "lambda.1se"),
                              eval_data = c('train', 'test'),
-                             weights = NULL, offset = NULL, 
+                             weights = NULL,
                              type.measure = c("default", "mse", "deviance", "class", "auc", "mae", "C"),
                              x_list_test = NULL, test_y = NULL,
                              nfolds = 10, foldid = NULL,
                              force = NULL,
                              ...) {
 
-  type.measure =  match.arg(type.measure)
-  s  <- match.arg(s)
+  type.measure <- match.arg(type.measure)
+  s <- match.arg(s)
   m <- length(x_list)
   N <- nrow(x_list[[1L]])
   p <- do.call(sum, lapply(x_list, ncol))
-  view_names  <- names(x_list)
+  view_names <- names(x_list)
   y <- drop(y)
 
   ## if (!is.null(lambda) && length(lambda) < 2)
@@ -110,64 +110,188 @@ view.contribution = function(x_list, y, family = gaussian(),
   if (eval_data == 'test' && (is.null(x_list_test) | is.null(test_y))) {
     stop("please provide test data if you want to evaluate the view contribution based on test data")
   }
-
+  
+  fam_to_subclass <- function(family){
+    if (is.list(family)) family <- family$family
+    switch(family,
+           "gaussian" = "elnet",
+           "binomial" = "lognet",
+           "poisson" = "fishnet",
+           "cox" = "coxnet",
+           "multiview")}
+  
+  subclass <- fam_to_subclass(family)
+  type.measure <- cvtype(type.measure, subclass)
+  
+  auc <- function(y,prob,w){
+    survival::concordance(y~prob)$concordance
+  }
+  
+  deviance_binomial <- function(pred, y){
+    prob_min = 1e-05
+    prob_max = 1 - prob_min
+    nc = dim(y)
+    if (is.null(nc)) {
+      y = as.factor(y)
+      ntab = table(y)
+      nc = as.integer(length(ntab))
+      y = diag(nc)[as.numeric(y), , drop=FALSE]
+    }
+    
+    predmat = pred
+    predmat = pmin(pmax(predmat, prob_min), prob_max)
+    lp = y[, 1] * log(1 - predmat) + y[, 2] * log(predmat)
+    ly = log(y)
+    ly[y == 0] = 0
+    ly = drop((y * ly) %*% c(1, 1))
+    return(mean(2 * (ly - lp)))
+  }
+  
+  deviance_poisson <- function(eta, y) {
+    deveta = y * eta - exp(eta)
+    devy = y * log(y) - y
+    devy[y == 0] = 0
+    return(mean(2 * (devy - deveta)))
+  }
+  
+  process_deviance_null = list(
+    "gaussian" = function(true_y, pred_y) {mean((true_y - mean(pred_y))^2)},
+    "binomial" = function(true_y, pred_y) deviance_binomial(rep(mean(pred_y), length(true_y)), true_y),
+    "poisson" = function(true_y, pred_y) deviance_poisson(rep(log(mean(pred_y)), length(true_y)), true_y),
+    "cox" = function(true_y, pred_y) glmnet::coxnet.deviance(y=true_y)
+  )
+  
+  process_deviance = list(
+    "gaussian" = function(true_y, pred_y) {mean((true_y - pred_y)^2)},
+    "binomial" = function(true_y, pred_y) deviance_binomial(pred_y, true_y),
+    "poisson" = function(true_y, pred_y) deviance_poisson(pred_y, true_y),
+    "cox" = function(true_y, pred_y) glmnet::coxnet.deviance(pred_y, true_y)
+  )
+  
+  Cindex = function(pred,y,weights=rep(1,nrow(y))){
+    if (!is.Surv(y)) y = Surv(y[,"time"],y[,"status"])
+    f = -pred
+    if (missing(weights))
+      concordance(y~f)$concordance
+    else
+      concordance(y~f,weights=weights)$concordance
+  }
+  
+  process_measure_null = list(
+    "mse" = function(true_y, pred_y, family) {mean((true_y - mean(pred_y))^2)},
+    "class" = function(true_y, pred_y, family) {mean(true_y != as.numeric(mean(pred_y) >= 0.5))},
+    "auc" = function(true_y, pred_y, family) {auc(true_y, rep(mean(pred_y), length(true_y)))},
+    "mae" = function(true_y, pred_y, family) {mean(abs(true_y - mean(pred_y)))},
+    "C" = function(true_y, pred_y, family) {0.5}, #{Cindex(rep(1, dim(true_y)[1]), true_y)}
+    "deviance" = function(true_y, pred_y, family) process_deviance_null[[family]](true_y, pred_y)
+  )
+  
+  if (is.list(family)) {
+    family_measure <- family$family
+  } else {
+    family_measure <- family
+  }
+  
   if (is.null(force)){
     # Benchmarked by the null model
     if (eval_data == 'test'){
-      err_null = mean((test_y - mean(y))^2)
-    } else if (eval_data == 'train'){
+      err_null = process_measure_null[[type.measure]](test_y, y, family_measure)
+    } else if (eval_data == 'train' & family_measure == 'cox'){
       err_null_fold = sapply(X = seq(max(foldid)),
                              FUN = function(i) {
                                ind <- foldid == i
-                               mean((mean(y[!ind]) - y[ind])^2)
+                               process_measure_null[[type.measure]](y[ind,], y[!ind,], family_measure)
+                             })
+      err_null = mean(err_null_fold)
+    } else{
+      err_null_fold = sapply(X = seq(max(foldid)),
+                             FUN = function(i) {
+                               ind <- foldid == i
+                               process_measure_null[[type.measure]](y[ind], y[!ind], family_measure)
                              })
       err_null = mean(err_null_fold)
     }
+    
+    process_measure = list(
+      "mse" = function(true_y, pred_y, family) {mean((true_y - pred_y)^2)},
+      "class" = function(true_y, pred_y, family) {mean(true_y != pred_y)},
+      "auc" = function(true_y, pred_y, family) {auc(true_y, pred_y)},
+      "mae" = function(true_y, pred_y, family) {mean(abs(true_y - pred_y))},
+      "C" = function(true_y, pred_y, family) {Cindex(pred_y, true_y)},
+      "deviance" = function(true_y, pred_y, family) process_deviance[[family]](true_y, pred_y)
+    )
 
     # Cooperative learning, all views
     full_fit_no_pf = cv.multiview(x_list, y = y, rho = rho, family = family,
                                     weights = weights, type.measure = type.measure,
-                                    foldid = foldid)
+                                    foldid = foldid, ...)
     if (eval_data == 'test'){
-      yhat_test_no_pf = predict.cv.multiview(full_fit_no_pf, x_list_test, s=s)
-      err_all_view = mean((yhat_test_no_pf - test_y)^2)
+      if (type.measure == "class"){
+        yhat_test_no_pf = predict.cv.multiview(full_fit_no_pf, x_list_test, s=s, type="class")
+      } else if (type.measure == "deviance" & family_measure == "binomial"){
+        yhat_test_no_pf = predict.cv.multiview(full_fit_no_pf, x_list_test, s=s, type="response")
+      }
+      else{
+        yhat_test_no_pf = predict.cv.multiview(full_fit_no_pf, x_list_test, s=s)
+      }
+      err_all_view = process_measure[[type.measure]](test_y, yhat_test_no_pf, family_measure) #mean((yhat_test_no_pf - test_y)^2)
     } else if (eval_data == 'train'){
       err_all_view = min(full_fit_no_pf$cvm)
     }
 
     # Use only one data view
+    if (is.list(family)) {family <- family$family}
+    
     err_each_view_list = c()
     err_view_name = c()
     for (i in seq(m)){
       data_view = x_list[[i]]
-      fit_data_view = glmnet::cv.glmnet(data_view, y, standardize = F, foldid = foldid)
+      fit_data_view = glmnet::cv.glmnet(data_view, y, standardize = F, foldid = foldid, 
+                                        type.measure = type.measure, family=family, ...)
 
       if (eval_data == 'test'){
         data_view_test = x_list_test[[i]]
-        data_view_pred = predict(fit_data_view, data_view_test, s=s)
-        err_each_view = mean((data_view_pred - test_y)^2)
+        if (type.measure == "class"){
+          data_view_pred = predict(fit_data_view, data_view_test, s=s, type="class")
+        } else if (type.measure == "deviance" & family == "binomial"){
+          data_view_pred = predict(fit_data_view, data_view_test, s=s, type="response")
+        } else {
+          data_view_pred = predict(fit_data_view, data_view_test, s=s)
+        }
+        err_each_view = process_measure[[type.measure]](test_y, data_view_pred, family) #mean((data_view_pred - test_y)^2)
       } else if (eval_data == 'train'){
         err_each_view = min(fit_data_view$cvm)
       }
       err_each_view_list = c(err_each_view_list, err_each_view)
       err_view_name = c(err_view_name, view_names[i])
     }
-
+    
     err_list = c(err_null, err_each_view_list, err_all_view)
-    err_list_contribution = (err_null - err_list) / err_null
+    if (type.measure == "mse" | type.measure == "mae" | type.measure == "class" | type.measure == "deviance"){
+      err_list_contribution = (err_null - err_list) / err_null
+    } else if (type.measure == "auc" | type.measure == "C"){
+      err_list_contribution = (err_list - err_null) / err_null
+    }
     df_res = data.frame(view = c("null", err_view_name, "cooperative (all)"),
-                        error = err_list,
+                        metric = err_list,
                         percentage_improvement = err_list_contribution*100)
+
   } else {
     x_list_base <- force
     base_model <- cv.multiview(x_list_base, y = y, rho = rho, family = family,
                               weights = weights, type.measure = type.measure,
-                              foldid = foldid)
-
+                              foldid = foldid, ...)
+    
     if (eval_data == 'test'){
       x_list_base_test = x_list_test[names(x_list_test) %in% names(force)]
-      yhat_base_model = predict(base_model, x_list_base_test, s=s)
-      err_base_model = mean((yhat_base_model - test_y)^2)
+      if (type.measure == "class"){
+        yhat_base_model = predict(base_model, x_list_base_test, s=s, type="class")
+      } else if (type.measure == "deviance" & family_measure == "binomial"){
+        yhat_base_model = predict(base_model, x_list_base_test, s=s, type="response")
+      } else {
+        yhat_base_model = predict(base_model, x_list_base_test, s=s)
+      }
+      err_base_model = process_measure[[type.measure]](test_y, yhat_base_model, family_measure) #mean((yhat_base_model - test_y)^2)
     } else if (eval_data == 'train'){
       err_base_model = min(base_model$cvm)
     }
@@ -183,13 +307,33 @@ view.contribution = function(x_list, y, family = gaussian(),
 
       each_model = cv.multiview(x_list_base_add, y = y, rho = rho, family = family,
                                 weights = weights, type.measure = type.measure,
-                                foldid = foldid)
+                                foldid = foldid, ...)
+      
+      if (eval_data == 'test'){
+        x_list_base_test = x_list_test[names(x_list_test) %in% names(force)]
+        if (type.measure == "class"){
+          yhat_base_model = predict(base_model, x_list_base_test, s=s, type="class")
+        } else if (type.measure == "deviance" & family_measure == "binomial"){
+          yhat_base_model = predict(base_model, x_list_base_test, s=s, type="response")
+        } else {
+          yhat_base_model = predict(base_model, x_list_base_test, s=s)
+        }
+        err_base_model = process_measure[[type.measure]](test_y, yhat_base_model, family_measure) #mean((yhat_base_model - test_y)^2)
+      } else if (eval_data == 'train'){
+        err_base_model = min(base_model$cvm)
+      }
 
       if (eval_data == 'test'){
         x_list_additional_test = x_list_test[!(names(x_list_test) %in% names(force))]
         x_list_base_add_test = append(x_list_base_test, list(x_list_additional_test[[i]]))
-        yhat_each_model = predict(each_model, x_list_base_add_test, s=s)
-        err_each_model = mean((yhat_each_model - test_y)^2)
+        if (type.measure == "class"){
+          yhat_each_model = predict(each_model, x_list_base_add_test, s=s, type="class")
+        } else if (type.measure == "deviance" & family_measure == "binomial"){
+          yhat_each_model = predict(each_model, x_list_base_add_test, s=s, type="response")
+        } else{
+          yhat_each_model = predict(each_model, x_list_base_add_test, s=s)
+        }
+        err_each_model = process_measure[[type.measure]](test_y, yhat_each_model, family_measure) #mean((yhat_each_model - test_y)^2)
       } else if (eval_data == 'train'){
         err_each_model = min(each_model$cvm)
       }
@@ -199,9 +343,13 @@ view.contribution = function(x_list, y, family = gaussian(),
     }
 
   err_list = c(err_base_model, err_each_view_list)
-  err_list_contribution = (err_base_model - err_list) / err_base_model
+  if (type.measure == "mse" | type.measure == "mae" | type.measure == "class" | type.measure == "deviance"){
+    err_list_contribution = (err_base_model - err_list) / err_base_model
+  } else if (type.measure == "auc" | type.measure == "C"){
+    err_list_contribution = (err_list - err_base_model) / err_base_model
+  }
   df_res = data.frame(view = c("baseline", err_view_name),
-                      error = err_list,
+                      metric = err_list,
                       percentage_improvement = err_list_contribution*100)
   }
 

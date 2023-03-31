@@ -12,7 +12,6 @@ view.contribution(
   s = c("lambda.min", "lambda.1se"),
   eval_data = c("train", "test"),
   weights = NULL,
-  offset = NULL,
   type.measure = c("default", "mse", "deviance", "class", "auc", "mae", "C"),
   x_list_test = NULL,
   test_y = NULL,
@@ -53,8 +52,6 @@ Default is \code{train}. If set to \code{test}, users need to provide the test d
 \code{x_list_test} and \code{y_test}.}
 
 \item{weights}{Observation weights; defaults to 1 per observation}
-
-\item{offset}{Offset vector (matrix) as in \code{multiview}}
 
 \item{type.measure}{loss to use for cross-validation. Currently
 five options, not all available for all models. The default is

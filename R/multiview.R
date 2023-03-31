@@ -353,6 +353,7 @@ multiview <- function(x_list, y, rho = 0, family = gaussian(), weights = NULL, o
     if(any(const_vars)) {
       exclude <- sort(unique(c(which(const_vars),exclude)))
       col_sd[const_vars] <- 1.0 ## we divide later, and do not want bad numbers
+      col_sd_list <- lapply(col_sd_list, function(x) ifelse(x == 0, 1.0, x)) # shadowing col_sd!
     }
     if(length(exclude) > 0) {
       jd <- match(exclude, seq(nvars), 0)

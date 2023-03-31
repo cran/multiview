@@ -1,12 +1,8 @@
-# CVXR 1.0-11
-
-* Being more careful about coercing to `dgCMatrix`
-  via `(as(as(<matrix>, "CsparseMatrix"), "generalMatrix"))`
-* Modify all class inheritance checks to use `inherits()`
-
-# CVXR 1.0-10
-
-* Now requiring the updated scs 3.0 as an import
+# multiview 0.7
+  * Added more measures to `view.contribution`
+  * Dropped CXX14 in favor of CXX17
+  * Bugfix: ensure constant columns are handled throughout (reported
+    by @himelmallick)
 
 # multiview 0.7
   * Added Cox model

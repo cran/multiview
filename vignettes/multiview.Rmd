@@ -121,7 +121,7 @@ We do not encourage users to extract the components directly. Instead, various m
 
 * `lambda` can be provided if the user wants to specify the lambda sequence, but typical usage is for the program to construct the lambda sequence on its own. When automatically generated, the $\lambda$ sequence is determined by `lambda.max` and `lambda.min.ratio`. The latter is the ratio of the smallest value of the generated $\lambda$ sequence (say `lambda.min`) to `lambda.max`.  The program generates `nlambda` values linear on the log scale from `lambda.max` down to `lambda.min`. `lambda.max` is not user-specified but is computed from the input $x$ and $y$: it is the smallest value for `lambda` such that all the coefficients are zero.  For `alpha = 0` (ridge) `lambda.max` would be $\infty$: in this case we pick a value corresponding to a small value for `alpha` close to zero.)
 
-* `standardize` is a logical flag for `x` variable standardization prior to fitting the model sequence. This is always done for `multiview`.
+* `standardize` is a logical flag for `x` variable standardization prior to fitting the model sequence. Default is `standardize = TRUE`. The coefficients are always returned on the original scale. If the variables are in the same units already, you might not want to standardize. 
 
 In addition, if there are missing values in the feature matrices: we recommend that you center the columns of each feature matrix, and then fill in the missing values with 0.
 

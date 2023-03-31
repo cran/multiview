@@ -1,6 +1,6 @@
-328d31dbc1f46837cc83030150c0cf7f *DESCRIPTION
+2189456658bfdd67e3b78a8df49b9891 *DESCRIPTION
 cfa28254add579e55dd4f13d41fdeeb0 *NAMESPACE
-24056e28fa181ea440662b4374f78c2e *NEWS.md
+a0de058c112a655bd7bc99552555c95d *NEWS.md
 fb05c6c568f6e2fd4483f446aadcbd13 *R/RcppExports.R
 24c8ba6398ebd8d44afe5498b47d73c1 *R/auc.R
 8cd96999dce298c1d81ce51ea2f6d2a3 *R/auc.mat.R
@@ -23,7 +23,7 @@ c65547cba8e3d5ad16b28a84881e7fca *R/getOptcv.R
 345b402cd7555181499d7237fa89e175 *R/get_start.R
 a6224dfa92ac162a19e455b90ec64108 *R/glmnet_softmax.R
 5ade80beacb5ac652da16951f34f08ff *R/multiview-package.R
-d453864139d7ae34fba4b6ebd44d0f01 *R/multiview.R
+2568c065bdfc0b8d65dbb03b9b178f2c *R/multiview.R
 c6d57172ff6cc3c6c63069971a171296 *R/multiview.control.R
 342bf5e291d62e4ab692a43c68f83fa3 *R/multiview.path.R
 cf5939fbdcb74015a57965825de7d457 *R/mvglmnet.fit.R
@@ -31,12 +31,12 @@ e78b4738b9578e2cfac6d3c46547b368 *R/predict.cv.multiview.R
 c2091b47da554820da0a6b2dac070d5c *R/predict.multiview.R
 06a6126a382e37ef2eca6cb02c0d4bf0 *R/response.coxnet.R
 d0e65ac3ed564f20543688685df2b14b *R/utils.R
-909a4549df4bd4dbada0aa9424276b39 *R/view.contribution.R
+f435ed6e63c14bc4f22729d10f1bec45 *R/view.contribution.R
 b7f14c58a33dc21c75450c9cfa8ce88e *README.md
-3fa32a2343e2e2234fbf727f0b9b7fb7 *build/vignette.rds
+1e585e31d52ef131522a8f0c1fd3cc80 *build/vignette.rds
 40ef6121bae43ddb17c2a5f5670e0e55 *inst/doc/multiview.R
-8f33958b80d46209367ebcdf3c7551ca *inst/doc/multiview.Rmd
-cc7d9c9f88f232f36378890dd5ea126b *inst/doc/multiview.pdf
+7049b0b229221038cf069cd25e3247d9 *inst/doc/multiview.Rmd
+59028904ca62d2f83442bc57ffa6a3ca *inst/doc/multiview.pdf
 ff77c645693a0793ee0e76586609ff16 *inst/exdata/example.RDS
 6b859fbc985f5fe718d0aa427b75d1ed *inst/exdata/example_binomial.RDS
 186771e05ce00f2261a44f132d582c2a *inst/exdata/example_contribution.RDS
@@ -73,9 +73,9 @@ e4c08beafea3fe0967fe62702d6df665 *man/response.coxnet.Rd
 efecfce9e152fa7db50b731ec5515df2 *man/select_matrix_list_columns.Rd
 8a0792e49f65f801e8b4481dbd7adcfd *man/to_nvar_index.Rd
 9eda6ab668f694adc4e23a860afa5985 *man/to_xlist_index.Rd
-a579a90f0def5e4f0a69bf919be95e9d *man/view.contribution.Rd
+96e0a387ce0ee343d510b28023ad36b8 *man/view.contribution.Rd
 c35f9ceb2c67cbde61d2d65be7a7e613 *man/weighted_mean_sd.Rd
-be142ade268bb3b40bbc841e8b232f2d *src/Makevars
+bc5c5ebf4e0ede05ae30d54a98dc7176 *src/Makevars
 38b6465567e9bfd8e97105f80789a5fd *src/RcppExports.cpp
 c659bb7fe2fc3c5bfc097e99d1109ffa *src/driver.h
 eb84814744119b7f61f2d92356db5fea *src/glmnetpp/CMakeLists.txt
@@ -268,4 +268,4 @@ d661f98ae53881ad1d675b4bb8fca1a3 *src/glmnetpp/test/translation/wls_unittest.cpp
 b047cb04f0ce8cdd6646c63b15aaa28d *src/glmnetpp/test/util/type_traits_unittest.cpp
 60635a7ab6c6a6a83b3e52160fbaeba7 *src/wls_exp.cpp
 28d9dec23a2f2f3d8d58cb9c8805e2fd *vignettes/assets/coop_refs.bib
-8f33958b80d46209367ebcdf3c7551ca *vignettes/multiview.Rmd
+7049b0b229221038cf069cd25e3247d9 *vignettes/multiview.Rmd
